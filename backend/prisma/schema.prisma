@@ -1,0 +1,110 @@
+// Prisma schema for Legal Document Intelligence Platform
+// SQLite does not support enums — all enum fields use String with validation in application code
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Role values: ADMIN | LEGAL_REVIEWER | READ_ONLY
+// ExtractionStatus values: PENDING | PROCESSING | EXTRACTED | OCR_REQUIRED | FAILED
+// ReviewStatus values: PENDING | UNDER_REVIEW | REVIEWED | NEEDS_MORE_INFO
+// DetectionStatus values: FOUND | NOT_DETECTED | NEEDS_REVIEW
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  role         String   @default("READ_ONLY")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  documents        Document[]
+  auditLogs        AuditLog[]
+  checklistReviews ChecklistItem[]
+
+  @@index([username])
+  @@index([email])
+}
+
+model Document {
+  id               String   @id @default(uuid())
+  ownerId          String
+  title            String
+  description      String?
+  originalFilename String
+  storedFilename   String   @unique
+  fileHash         String
+  pageCount        Int      @default(0)
+  extractionStatus String   @default("PENDING")
+  reviewStatus     String   @default("PENDING")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  owner          User            @relation(fields: [ownerId], references: [id])
+  pages          DocumentPage[]
+  checklistItems ChecklistItem[]
+
+  @@index([ownerId])
+  @@index([extractionStatus])
+  @@index([reviewStatus])
+}
+
+model DocumentPage {
+  id             String   @id @default(uuid())
+  documentId     String
+  pageNumber     Int
+  extractedText  String
+  normalizedText String
+  createdAt      DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([documentId, pageNumber])
+}
+
+model ChecklistItem {
+  id              String    @id @default(uuid())
+  documentId      String
+  itemKey         String
+  itemLabel       String
+  detectionStatus String    @default("NEEDS_REVIEW")
+  matchedText     String?
+  pageNumber      Int?
+  reviewerNotes   String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reviewedBy User?    @relation(fields: [reviewedById], references: [id])
+
+  @@index([documentId])
+  @@unique([documentId, itemKey])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  outcome    String   @default("SUCCESS")
+  requestId  String?
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

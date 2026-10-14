@@ -1,0 +1,53 @@
+# Docker Compose configuration — Module 1: Platform Engineering
+# Runs frontend, backend, and persists SQLite database and uploads
+
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: legal-doc-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: file:/data/prod.db
+      UPLOAD_DIR: /data/uploads
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production-to-a-very-long-random-string}
+      JWT_EXPIRES_IN: 24h
+      CORS_ORIGIN: http://localhost:80
+      MAX_FILE_SIZE_MB: 10
+      MAX_PAGE_COUNT: 200
+    volumes:
+      # Persistent SQLite database
+      - db_data:/data
+      # Persistent uploads
+      - uploads_data:/data/uploads
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: legal-doc-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  db_data:
+    driver: local
+  uploads_data:
+    driver: local
